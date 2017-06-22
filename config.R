@@ -17,3 +17,5 @@ if (Sys.info()["user"] == "guchenyang") {
 
 library(knitr)
 library(tidyverse)
+library(splines)
+library(reshape2)

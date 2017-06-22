@@ -1,9 +1,6 @@
 
 rm(list=ls())
-library("dplyr")
-library("splines")
-library("tidyr")
-library("reshape2")
+source("config.R")
 library(BayesTree)
 igma = 1.0 #y = f(x) + sigma*z , z~N(0,1)
 n = 100 #number of observations
@@ -37,7 +34,7 @@ plot(bartFit2)
 # SET UP AND RUN BART 
 #------------------------------------#
 
-dat0<- read.csv("/Users/liangyuanhu/GoogleDrive/ci_bart/dat1.csv",header=T)
+dat0 <- read.csv(file.path(root, "dat1.csv"))
 #some patients are treated at diagnosis
 rx0<-filter(dat0,days2trx==0) #548 patients
 dat0[dat0$days2trx==0,]$days2trx<-.5
