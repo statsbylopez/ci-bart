@@ -1,0 +1,12 @@
+---
+title: "Bayesian additive regression trees for causal inference with multiple treatments"
+author: "Michael Lopez, Liangyuan Hu, Chenyang Gu"
+date: "June 27, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Approaches for estimating the causal effects of a binary treatment, including matching, subclassification, and weighting, have been well documented. Estimating causal effects of multiple treatments, meanwhile, requires additional assumptions and more refined techniques. Disappointingly, these methods have generally been inaccesible to practitioners, many of which have resorted to dichotomization of the treatments assignment mechanisim in order to apply more familar tools. We propose the use of Bayesian Additive Regression Trees (BART) for causal inference with multiple treatments. Among its advanages, BART is straighforward to implement, requires fewer user inputs, and operates smoothly with large numbers of covariates. We explore the operating characteristics of BART to estimate causal effects with multiple treatments, and use simulations to compare BART to more traditional approaches, including generalized boosted models, matching on vectors of generalized propensity scores, and inverse probability weighting. We conclude by using each approach to estimate the causal effects of **insert something here**. As to fascilitate the increased usage of these tools, we make our analysis and simulation code available via an online repository. 
