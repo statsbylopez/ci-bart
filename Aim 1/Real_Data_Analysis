@@ -470,52 +470,44 @@ RD13.est = RR13.est = OR13.est = NULL
 RD23.est = RR23.est = OR23.est = NULL
 
 for (m in 1:1000) {
-    
+
     # potential outcome mean for each treatment level
-    y1.hat = mean(c(y[treat==1], bart_tot21$yhat.test[m,], bart_tot31$yhat.test[m,]))
-    y2.hat = mean(c(y[treat==2], bart_tot12$yhat.test[m,], bart_tot32$yhat.test[m,]))
-    y3.hat = mean(c(y[treat==3], bart_tot13$yhat.test[m,], bart_tot23$yhat.test[m,]))
+    y1.hat = mean( c(y[treat==1], rbinom(n2.tilde, 1, pnorm(bart_tot21$yhat.test[m,])), rbinom(n3.tilde, 1, pnorm(bart_tot31$yhat.test[m,]))) )
+    y2.hat = mean( c(y[treat==2], rbinom(n1.tilde, 1, pnorm(bart_tot12$yhat.test[m,])), rbinom(n3.tilde, 1, pnorm(bart_tot32$yhat.test[m,]))) )
+    y3.hat = mean( c(y[treat==3], rbinom(n1.tilde, 1, pnorm(bart_tot13$yhat.test[m,])), rbinom(n2.tilde, 1, pnorm(bart_tot23$yhat.test[m,]))) )
 
     # risk difference
     RD12.est[m] = y1.hat - y2.hat
     RD13.est[m] = y1.hat - y3.hat
     RD23.est[m] = y2.hat - y3.hat
     
-    # relative risk (log-scale)
-    RR12.est[m] = log(y1.hat / y2.hat)
-    RR13.est[m] = log(y1.hat / y3.hat)
-    RR23.est[m] = log(y2.hat / y3.hat)
+    # relative risk
+    RR12.est[m] = y1.hat / y2.hat
+    RR13.est[m] = y1.hat / y3.hat
+    RR23.est[m] = y2.hat / y3.hat
     
     # marginal odds ratio (log-scale)
-    OR12.est[m] = log( (y1.hat / (1 - y1.hat)) / (y2.hat / (1 - y2.hat)) )
-    OR13.est[m] = log( (y1.hat / (1 - y1.hat)) / (y3.hat / (1 - y3.hat)) )
-    OR23.est[m] = log( (y2.hat / (1 - y2.hat)) / (y3.hat / (1 - y3.hat)) )
+    OR12.est[m] = (y1.hat / (1 - y1.hat)) / (y2.hat / (1 - y2.hat))
+    OR13.est[m] = (y1.hat / (1 - y1.hat)) / (y3.hat / (1 - y3.hat))
+    OR23.est[m] = (y2.hat / (1 - y2.hat)) / (y3.hat / (1 - y3.hat))
 }
 
 # posterior summary
-Posterior_Summ = function(RD.est, logRR.est, logOR.est) {
+Posterior_Summ = function(RD.est, RR.est, OR.est) {
     # risk difference
     RD.mean = mean(RD.est)
     RD.lower = quantile(RD.est, probs=0.025)
     RD.upper = quantile(RD.est, probs=0.975)
     
     # relative risk
-    logRR.mean = mean(logRR.est)
-    logRR.lower = quantile(logRR.est, probs=0.025)
-    logRR.upper = quantile(logRR.est, probs=0.975)
-    
-    RR.mean = exp(logRR.mean)
-    RR.lower = exp(logRR.lower)
-    RR.upper = exp(logRR.upper)
+    RR.mean = mean(RR.est)
+    RR.lower = quantile(RR.est, probs=0.025)
+    RR.upper = quantile(RR.est, probs=0.975)
     
     # marginal odds ratio
-    logOR.mean = mean(logOR.est)
-    logOR.lower = quantile(logRR.mean, probs=0.025)
-    logOR.upper = quantile(logRR.mean, probs=0.975)
-    
-    OR.mean = exp(logOR.mean)
-    OR.lower = exp(logOR.lower)
-    OR.upper = exp(logOR.upper)
+    OR.mean = mean(OR.est)
+    OR.lower = quantile(RR.mean, probs=0.025)
+    OR.upper = quantile(RR.mean, probs=0.975)
     
     # summarize results
     RD = c(RD.mean, RD.lower, RD.upper)
@@ -533,8 +525,9 @@ summ13 = Posterior_Summ(RD13.est, RR13.est, OR13.est)
 summ23 = Posterior_Summ(RD23.est, RR23.est, OR23.est)
 round(cbind(summ12, summ13, summ23), digits=3)
 
-#     EST LOWER UPPER |   EST LOWER UPPER |   EST LOWER UPPER
-#RD 0.024 0.005 0.043 | 0.669 0.624 0.720 | 0.645 0.598 0.694
-#RR 0.970 0.948 0.994 | 0.541 0.521 0.559 | 0.558 0.538 0.578
-#OR 0.983 0.970 0.970 | 0.743 0.541 0.541 | 0.756 0.558 0.558
+#      EST  LOWER  UPPER |    EST  LOWER  UPPER |   EST LOWER UPPER
+#RD -0.065 -0.068 -0.061 | -0.032 -0.038 -0.026 | 0.033 0.026 0.039
+#RR  0.313  0.296  0.330 |  0.480  0.432  0.531 | 1.535 1.390 1.701
+#OR  0.292  0.313  0.313 |  0.464  0.480  0.480 | 1.591 1.535 1.535
+
 
