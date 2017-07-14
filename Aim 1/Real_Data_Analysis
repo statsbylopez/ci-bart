@@ -349,8 +349,6 @@ round(cbind(summ12, summ13, summ23), digits=3)
 ############################################################################################
 ## Three methods to estimate generalized propensity score (GPS)
 
-
-
 ## multinomial logit model
 
 # https://stats.idre.ucla.edu/r/dae/multinomial-logistic-regression/
@@ -359,11 +357,6 @@ library(nnet)
 mod = multinom(treat ~ psa + days2trx + age + factor(race) + spanish + factor(insurance) + factor(income) + factor(education) + factor(deyo) + factor(gs) + tstage + factor(dyearcat), data = mydata)
 
 pred.class.probs.logit = fitted(mod)
-
-
-
-
-
 
 
 ## multinomial probit model
@@ -377,10 +370,6 @@ mod.probit = mnp(treat ~ psa + days2trx + age + factor(race) + spanish + factor(
 
 pred.class.probs.mpm = predict(mod.probit, type = "prob")
 pred.class.probs.probit = cbind(pred.class.probs.mpm$p[,2:3], pred.class.probs.mpm$p[,1])
-
-
-
-
 
 
 ## Multinomial Probit BART (MP-BART)
@@ -406,6 +395,35 @@ pred.class.probs.mpbart = out$class_prob_train
 ## Horvitz-Thompson estimator
 library(twang)
 
+# MP-BART
+mu1.hat.mpbart = sum(y[treat==1] / pred.class.probs.mpbart[treat==1,1]) / nobs
+mu2.hat.mpbart = sum(y[treat==2] / pred.class.probs.mpbart[treat==2,2]) / nobs
+mu3.hat.mpbart = sum(y[treat==3] / pred.class.probs.mpbart[treat==3,3]) / nobs
+
+RD12.est = mu1.hat.mpbart - mu2.hat.mpbart
+RD13.est = mu1.hat.mpbart - mu3.hat.mpbart
+RD23.est = mu2.hat.mpbart - mu3.hat.mpbart
+
+RR12.est = mu1.hat.mpbart / mu2.hat.mpbart
+RR13.est = mu1.hat.mpbart / mu3.hat.mpbart
+RR23.est = mu2.hat.mpbart / mu3.hat.mpbart
+
+OR12.est = (mu1.hat.mpbart / (1 - mu1.hat.mpbart)) / (mu2.hat.mpbart / (1 - mu2.hat.mpbart))
+OR13.est = (mu1.hat.mpbart / (1 - mu1.hat.mpbart)) / (mu3.hat.mpbart / (1 - mu3.hat.mpbart))
+OR23.est = (mu2.hat.mpbart / (1 - mu2.hat.mpbart)) / (mu3.hat.mpbart / (1 - mu3.hat.mpbart))
+
+out = cbind(c(RD12.est, RR12.est, OR12.est), c(RD13.est, RR13.est, OR13.est), c(RD23.est, RR23.est, OR23.est))
+colnames(out) = c("1vs2","1vs3","2vs3")
+rownames(out) = c("RD","RR","OR")
+round(out, digits=3)
+#     1vs2  1vs3  2vs3
+#RD -0.029 0.009 0.038
+#RR  0.547 1.356 2.476
+#OR  0.531 1.369 2.577
+
+
+
+
 
 
 
@@ -416,6 +434,58 @@ library(twang)
 # Feng, P., Zhou, X. H., Zou, Q. M., Fan, M. Y., & Li, X. S. (2012).
 # Generalized propensity score for estimating the average treatment effect of multiple treatments.
 # Statistics in medicine, 31(7), 681-697.
+
+# logit
+# extremely large weights estimated from the multinomial logit model
+mu1.hat.ratio.logit = sum(y[treat==1] / pred.class.probs.logit[treat==1,1]) / sum(1 / pred.class.probs.logit[treat==1,1])
+mu2.hat.ratio.logit = sum(y[treat==2] / pred.class.probs.logit[treat==2,2]) / sum(1 / pred.class.probs.logit[treat==2,2])
+mu3.hat.ratio.logit = sum(y[treat==3] / pred.class.probs.logit[treat==3,3]) / sum(1 / pred.class.probs.logit[treat==3,3])
+
+RD12.est = mu1.hat.ratio.logit - mu2.hat.ratio.logit
+RD13.est = mu1.hat.ratio.logit - mu3.hat.ratio.logit
+RD23.est = mu2.hat.ratio.logit - mu3.hat.ratio.logit
+
+RR12.est = mu1.hat.ratio.logit / mu2.hat.ratio.logit
+RR13.est = mu1.hat.ratio.logit / mu3.hat.ratio.logit
+RR23.est = mu2.hat.ratio.logit / mu3.hat.ratio.logit
+
+OR12.est = (mu1.hat.ratio.logit / (1 - mu1.hat.ratio.logit)) / (mu2.hat.ratio.logit / (1 - mu2.hat.ratio.logit))
+OR13.est = (mu1.hat.ratio.logit / (1 - mu1.hat.ratio.logit)) / (mu3.hat.ratio.logit / (1 - mu3.hat.ratio.logit))
+OR23.est = (mu2.hat.ratio.logit / (1 - mu2.hat.ratio.logit)) / (mu3.hat.ratio.logit / (1 - mu3.hat.ratio.logit))
+
+out = cbind(c(RD12.est, RR12.est, OR12.est), c(RD13.est, RR13.est, OR13.est), c(RD23.est, RR23.est, OR23.est))
+colnames(out) = c("1vs2","1vs3","2vs3")
+rownames(out) = c("RD","RR","OR")
+
+
+# MP-BART
+mu1.hat.ratio.mpbart = sum(y[treat==1] / pred.class.probs.mpbart[treat==1,1]) / sum(1 / pred.class.probs.mpbart[treat==1,1])
+mu2.hat.ratio.mpbart = sum(y[treat==2] / pred.class.probs.mpbart[treat==2,2]) / sum(1 / pred.class.probs.mpbart[treat==2,2])
+mu3.hat.ratio.mpbart = sum(y[treat==3] / pred.class.probs.mpbart[treat==3,3]) / sum(1 / pred.class.probs.mpbart[treat==3,3])
+
+RD12.est = mu1.hat.ratio.mpbart - mu2.hat.ratio.mpbart
+RD13.est = mu1.hat.ratio.mpbart - mu3.hat.ratio.mpbart
+RD23.est = mu2.hat.ratio.mpbart - mu3.hat.ratio.mpbart
+
+RR12.est = mu1.hat.ratio.mpbart / mu2.hat.ratio.mpbart
+RR13.est = mu1.hat.ratio.mpbart / mu3.hat.ratio.mpbart
+RR23.est = mu2.hat.ratio.mpbart / mu3.hat.ratio.mpbart
+
+OR12.est = (mu1.hat.ratio.mpbart / (1 - mu1.hat.ratio.mpbart)) / (mu2.hat.ratio.mpbart / (1 - mu2.hat.ratio.mpbart))
+OR13.est = (mu1.hat.ratio.mpbart / (1 - mu1.hat.ratio.mpbart)) / (mu3.hat.ratio.mpbart / (1 - mu3.hat.ratio.mpbart))
+OR23.est = (mu2.hat.ratio.mpbart / (1 - mu2.hat.ratio.mpbart)) / (mu3.hat.ratio.mpbart / (1 - mu3.hat.ratio.mpbart))
+
+out = cbind(c(RD12.est, RR12.est, OR12.est), c(RD13.est, RR13.est, OR13.est), c(RD23.est, RR23.est, OR23.est))
+colnames(out) = c("1vs2","1vs3","2vs3")
+rownames(out) = c("RD","RR","OR")
+round(out, digits=3)
+#     1vs2   1vs3  2vs3
+#RD -0.044 -0.026 0.019
+#RR  0.435  0.571 1.311
+#OR  0.415  0.555 1.338
+
+
+
 
 
 
