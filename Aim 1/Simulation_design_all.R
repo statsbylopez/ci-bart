@@ -22,7 +22,6 @@ data_generation_all = function(n, ratio, p=10, Zmodel, Ymodel, Aligned) {
   # approximate ratio of treatment groups
   # T1:T2:T3 = 1:2:4, 1:1:1, 4:2:1 
   # ratio = 2, 1, 0.5
-  ratio <- 0.5
   if (ratio == 2){
     alpha1 <- -1.8
     alpha2 <- -1.0}
@@ -186,4 +185,55 @@ for (i in 1:3){
 
 save(df.out, file="~/Dropbox/ci-bart/Data/Simulation_complete")
 
+
+
+### Check covariate overlap in random samples of the iterations
+
+library(nnet)
+library(ggjoy)
+
+
+function.graph <- function(iteration){
+  df.temp <- data.frame(df.out[[iteration]][[1]]) 
+  df.temp <- select(df.temp, -Y1, -Y2, -Y3, -Yobs)
+  fit1 <- multinom(Z ~ ., data = df.temp)
+  temp <- data.frame(fitted(fit1))
+  colnames(temp) <- c("p.1", "p.2", "p.3")
+  df.graphs <- cbind(df.temp, temp) %>% mutate(Z = Z + 1)
+  
+  
+  df.graphs1 <- gather(df.graphs, "type", "weight", p.1:p.3)
+  df.graphs1 <- df.graphs1 %>% 
+    mutate(truth = (type == "p.1" & Z == 1) | (type == "p.2" & Z == 2) | (type == "p.3" & Z == 3))
+  trt_names <- as_labeller(c(`p.1` = "Pr(Treatment 1)",
+                             `p.2` = "Pr(Treatment 2)",
+                             `p.3` = "Pr(Treatment 3)"))
+  type <- df.out[[iteration]][[2]][1,]
+  subtitle <- paste0("ratio of ", type$ratio, ", ",  type$p, " covariates, Zmodel ", 
+                     type$Zmodel, ", Ymodel ", type$Ymodel, ", Aligned = ", type$Aligned)
+  p1 <- ggplot(df.graphs1, aes(x = weight, y = as.factor(Z), fill = truth)) + 
+    geom_joy() + 
+    facet_grid(~factor(type), labeller = trt_names) + 
+    xlab("Probability of receiving treatment (GPS)") + ylab("Treatment actually received") + 
+    labs(title = "Treatment assignment probabilities by treatment group", 
+         subtitle = subtitle) + 
+    scale_fill_discrete("Received trt?")
+  return(p1)
+}
+
+
+set.seed(10)
+### randomly sample 6 of the 48 iterations
+n.sample <- 6
+configurations <- 48
+configurations.sample <- sample(configurations, n.sample)
+p1 <- function.graph(configurations.sample[1])
+p2 <- function.graph(configurations.sample[2])
+p3 <- function.graph(configurations.sample[3])
+p4 <- function.graph(configurations.sample[4])
+p5 <- function.graph(configurations.sample[5])
+p6 <- function.graph(configurations.sample[6])
+
+library(gridExtra)
+grid.arrange(p1,p2, p3, p4, p5, p6, nrow = 3)
 
