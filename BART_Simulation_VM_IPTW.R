@@ -238,6 +238,29 @@ config.all.long %>% group_by(method, scenario, treatment.effect) %>%
 
 
 ########################################################################
+###### ANOVA's
+########################################################################
+library(broom)
+anova.matching <- lm(bias~(Zmodel + Ymodel + Aligned + type)^2-1, data = filter(config.all.long, method == "Matching"))
+anova.fit.matching <- tidy(anova(anova.matching)) %>% arrange(-meansq) %>% 
+  mutate(fraction.explained = meansq/sum(meansq), 
+         type = "Matching", rank = 1:n())
+
+anova.iptw <- lm(bias~(Zmodel + Ymodel + Aligned + type)^2-1, data = filter(config.all.long, method == "IPTW"))
+anova.fit.iptw <- tidy(anova(anova.iptw)) %>% arrange(-meansq) %>% 
+  mutate(fraction.explained = meansq/sum(meansq), 
+         type = "IPTW", rank = 1:n())
+
+bind_rows(anova.fit.matching, anova.fit.iptw) %>% 
+  filter(rank < 9) %>%
+  ggplot(aes(fraction.explained, x = type, fill = reorder(term, fraction.explained))) + 
+  geom_col() + 
+  scale_fill_brewer(type = "qual", "Variable") + 
+  labs(title = "Percent of bias explained by each configuration factor", subtitle = "Top 8 factors only")
+
+
+
+########################################################################
 ###### Extras from last time
 ########################################################################
 
