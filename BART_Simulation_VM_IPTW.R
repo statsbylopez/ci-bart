@@ -30,7 +30,7 @@ dat2 <- dat %>% mutate(sample.size = sample.size[2])
 dat <- bind_rows(dat1, dat2) %>% mutate(config.id = 1:n())
 dat.interesting <- dat %>% filter(p == 10, ratio == 2, sample.size == 700)
 
-nsim <- 5
+nsim <- 50
 
 
 ####################################################################
@@ -46,6 +46,7 @@ config.all <- NULL ### Stores all of the simulations
 
 for (j in 1:nrow(dat.interesting)){
   config.sim <- dat.interesting$config.id[j]
+  sample.size <- dat.interesting$sample.size[j]
   scenario <- data.frame(df.out[[config.sim]][1]) %>% mutate(Z = Z + 1)
   tau.all <- NULL
   
@@ -53,7 +54,7 @@ for (j in 1:nrow(dat.interesting)){
       
     print(paste("simulation", i, "with scenario", j))
     
-    scenario.sim <- sample_n(scenario, 3500)
+    scenario.sim <- sample_n(scenario, sample.size)  ### Make sure this works with 4900 
     scenario.sim <- arrange(scenario.sim, Z)
     y <- scenario.sim$Yobs
     treat <- scenario.sim$Z
