@@ -71,6 +71,7 @@ data_generation_all = function(n, ratio, p=10, Zmodel, Ymodel, Aligned) {
   }
   Z = NULL
   for (i in 1:n) Z[i] = sample(c(0,1,2), size=1, replace=T, prob=c(Zp1[i],Zp2[i],Zp3[i]))
+  ### Note: change these to 1, 2, 3
   
   #table(Z)
   
