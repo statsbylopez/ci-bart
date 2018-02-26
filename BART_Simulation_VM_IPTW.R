@@ -127,7 +127,7 @@ for (j in 1:nrow(dat.interesting)){
     temp.3[match.13[1,],] 
     
     match.13[,2] <- match.13[,2] + sum(scenario.sim$Z == 2)
-    scenario.sim[match.13[100,],]
+    scenario.sim[match.13[10],]
     
     
     match.12 <- match.12[match.12[,1] %in% rownames(m.temp), ]
@@ -228,7 +228,7 @@ ggplot(config.all.long, aes(x = method, y = bias, fill = method)) +
   ylab("Bias") + xlab("") + 
   coord_flip() + 
   theme(legend.position="none") + 
-  facet_wrap(~scenario + treatment.effect)
+  facet_wrap(~scenario + treatment.effect, ncol = 3)
 
 
 config.all.long %>% group_by(method, scenario, treatment.effect) %>% 
