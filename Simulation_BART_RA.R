@@ -1,6 +1,7 @@
 library(tidyverse)
 library(arm)
-library(dbarts)
+#library(dbarts)
+library(BART)
 
 
 ####################################################################
@@ -41,30 +42,31 @@ nsim <- 200
 
 ### Everyone
 set.seed(2018)
-config.all <- NULL ### Stores all of the simulations
+config.all = NULL ### Stores all of the simulations
 
 n.imps = 1000 # number of imputations
 
 for (j in 1:nrow(dat.interesting)){
-    config.sim <- dat.interesting$config.id[j]
-    sample.size <- dat.interesting$sample.size[j]
-    scenario <- data.frame(df.out[[config.sim]][1]) %>% mutate(Z = Z + 1)
-    tau.all <- NULL
+    config.sim = dat.interesting$config.id[j]
+    sample.size = dat.interesting$sample.size[j]
+    scenario = data.frame(df.out[[config.sim]][1]) %>% mutate(Z = Z + 1)
+    tau.all = NULL
     
+    best.mod = NULL
     for (i in 1:nsim){
         
         print(paste("simulation", i, "with scenario", j))
         
-        scenario.sim <- sample_n(scenario, sample.size)  ### Make sure this works with 4900
-        scenario.sim <- arrange(scenario.sim, Z)
-        Y <- scenario.sim$Yobs
-        Z <- scenario.sim$Z
+        scenario.sim = sample_n(scenario, sample.size)  ### Make sure this works with 4900
+        scenario.sim = arrange(scenario.sim, Z)
+        Y = scenario.sim$Yobs
+        Z = scenario.sim$Z
         
         
         ## Regression adjustment (Model-based multiple imputation)
-        data1 <- scenario.sim[Z==1, 4:ncol(scenario.sim)]
-        data2 <- scenario.sim[Z==2, 4:ncol(scenario.sim)]
-        data3 <- scenario.sim[Z==3, 4:ncol(scenario.sim)]
+        data1 = scenario.sim[Z==1, 4:ncol(scenario.sim)]
+        data2 = scenario.sim[Z==2, 4:ncol(scenario.sim)]
+        data3 = scenario.sim[Z==3, 4:ncol(scenario.sim)]
         
         # outcome model for each treatment level
         # bayesian logistic regression model, default Cauchy prior with scale 2.5
@@ -120,6 +122,9 @@ for (j in 1:nrow(dat.interesting)){
         att13.ra = mean(att13.est)
         
         
+        
+        
+        
         ## BART
         
         # treatment 1 to 2 or 3
@@ -130,17 +135,22 @@ for (j in 1:nrow(dat.interesting)){
         xp2[,1] = 2  # switch treatment label 1 to 2
         xp3[,1] = 3  # switch treatment label 1 to 3
         
-        bart_tot12 = bart(x.train = xt, y.train = Y,  x.test = xp2, ntree = 100, ndpost = n.imps)
-        bart_tot13 = bart(x.train = xt, y.train = Y,  x.test = xp3, ntree = 100, ndpost = n.imps)
+        #bart_tot12 = bart(x.train = xt, y.train = Y,  x.test = xp2, ntree = 100, ndpost = n.imps)
+        #bart_tot13 = bart(x.train = xt, y.train = Y,  x.test = xp3, ntree = 100, ndpost = n.imps)
+        
+        bart_mod = pbart(x.train = xt, y.train = Y, k=2, ntree=100, ndpost=n.imps, nskip=500)
+        bart_pred1 = pwbart(xp1, bart_mod$treedraws)
+        bart_pred2 = pwbart(xp2, bart_mod$treedraws)
+        bart_pred3 = pwbart(xp3, bart_mod$treedraws)
         
         # Average treatment effects on the treatment group 1 (ATTs)
         n1 = nrow(xp1)
         att12.est = att13.est = NULL
         for (m in 1:n.imps) {
             # potential outcomes for treatment group 1
-            y11.hat = rbinom(n1, 1, pnorm(bart_tot12$yhat.train[m,Z==1]))
-            y12.hat = rbinom(n1, 1, pnorm(bart_tot12$yhat.test[m,]))
-            y13.hat = rbinom(n1, 1, pnorm(bart_tot13$yhat.test[m,]))
+            y11.hat = rbinom(n1, 1, pnorm(bart_pred1[m,]))
+            y12.hat = rbinom(n1, 1, pnorm(bart_pred2[m,]))
+            y13.hat = rbinom(n1, 1, pnorm(bart_pred3[m,]))
             
             # risk difference
             att12.est[m] = mean(y11.hat) - mean(y12.hat)
@@ -151,21 +161,94 @@ for (j in 1:nrow(dat.interesting)){
         att13.bart = mean(att13.est)
         
         
-        tau.sim <- data.frame(att12.ra, att13.ra, att12.bart, att13.bart)
-        tau.all <- rbind(tau.all, tau.sim)
+        
+        
+        
+        ## BART_CV (cross-validation, K=5)
+        
+        xt = scenario.sim[,5:ncol(scenario.sim)]
+        
+        # Create five equally size folds
+        K = 5
+        folds = cut(seq(1,nrow(xt)), breaks=K, labels=FALSE)
+        
+        hyperpar = 1:8 # hyperparameters for k
+        cv.error = NULL
+        for (s in 1:8) {
+            # Perform five-fold cross validation
+            mis.error = NULL
+            for (k in 1:K) {
+                # Segement your data by fold using the which() function
+                testIndexes = which(folds==k, arr.ind=TRUE)
+                testX = xt[testIndexes, ]
+                trainX = xt[-testIndexes, ]
+                testY = Y[testIndexes]
+                trainY = Y[-testIndexes]
+                
+                # fit BART
+                n.test = length(testY)
+                bart_mod = pbart(x.train = trainX, y.train = trainY, k=s, ntree=100, ndpost=n.imps, nskip=500)
+                bart_pred = pwbart(testX, bart_mod$treedraws)
+                y.hat = rbinom(n.test, 1, pnorm(colMeans(bart_pred)))
+                
+                # calculate misclassfication rate
+                mis.error[k] = sum(testY != y.hat) / n.test
+            }
+            # calculate cross-validation error
+            cv.error[s] = mean(mis.error)
+        }
+        
+        # fit the final selected BART model
+        best.mod[i] = which.min(cv.error)
+        bart_mod = pbart(x.train = xt, y.train = Y, k=best.mod[i], ntree=100, ndpost=n.imps, nskip=500)
+        
+        # treatment 1 to 2 or 3
+        xp1 = xt[Z==1,]
+        xp2 = xp1
+        xp3 = xp1
+        xp2[,1] = 2  # switch treatment label 1 to 2
+        xp3[,1] = 3  # switch treatment label 1 to 3
+        
+        bart_pred1 = pwbart(xp1, bart_mod$treedraws)
+        bart_pred2 = pwbart(xp2, bart_mod$treedraws)
+        bart_pred3 = pwbart(xp3, bart_mod$treedraws)
+        
+        # Average treatment effects on the treatment group 1 (ATTs)
+        n1 = nrow(xp1)
+        att12.est = att13.est = NULL
+        for (m in 1:n.imps) {
+            # potential outcomes for treatment group 1
+            y11.hat = rbinom(n1, 1, pnorm(bart_pred1[m,]))
+            y12.hat = rbinom(n1, 1, pnorm(bart_pred2[m,]))
+            y13.hat = rbinom(n1, 1, pnorm(bart_pred3[m,]))
+            
+            # risk difference
+            att12.est[m] = mean(y11.hat) - mean(y12.hat)
+            att13.est[m] = mean(y11.hat) - mean(y13.hat)
+        }
+        
+        att12.bart.cv = mean(att12.est)
+        att13.bart.cv = mean(att13.est)
+        
+        
+        
+        # combine results
+        tau.sim = data.frame(att12.ra, att13.ra, att12.bart, att13.bart, att12.bart.cv, att13.bart.cv)
+        tau.all = rbind(tau.all, tau.sim)
         
         cat(i,"\n")
     }
     
-    tau.all <- tau.all %>% mutate(sim.id = 1:n())
-    config.summary <- dat.interesting %>% filter(config.id == config.sim)
-    config.out <- data.frame(config.summary, tau.all)
-    config.all <- bind_rows(config.all, config.out)
+    tau.all = tau.all %>% mutate(sim.id = 1:n())
+    config.summary = dat.interesting %>% filter(config.id == config.sim)
+    config.out = data.frame(config.summary, tau.all)
+    config.all = bind_rows(config.all, config.out)
 }
 
 
 config.all.long <- gather(config.all, "type", "estimate", att12.ra:att13.bart) %>% mutate(method = ifelse(type == "att12.ra" | type == "att13.ra", "RA", "BART"), treatment.effect = ifelse(type == "att12.bart" | type == "att12.ra", "Treatment 1 v. 2", "Treatment 1 v. 3"), true.effect = ifelse(treatment.effect == "Treatment 1 v. 2", ATT12, ifelse(treatment.effect == "Treatment 1 v. 3", ATT13, ATT23)), bias = estimate - true.effect, scenario = paste(ratio, p, Zmodel, Ymodel, Aligned))
 
+pdf("BART.pdf", width=6, height=18)
 ggplot(config.all.long, aes(x = method, y = bias, fill = method)) +
 geom_boxplot() +
 geom_hline(aes(yintercept = 0), lty = 2, col = "red") +
@@ -174,8 +257,8 @@ scale_fill_brewer(type = "qual") +
 ylab("Bias") + xlab("") +
 coord_flip() +
 theme(legend.position="none") +
-facet_wrap(~scenario + treatment.effect, ncol = 4)
-
+facet_wrap(~scenario + treatment.effect, ncol = 2)
+dev.off()
 
 config.all.long %>% group_by(method, scenario, treatment.effect) %>% summarise(mean.bias = round(mean(bias), 3), rmse = round(sqrt(mean((bias)^2)), 3))
 
