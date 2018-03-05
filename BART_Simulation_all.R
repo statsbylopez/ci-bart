@@ -2,7 +2,8 @@ library(nnet)
 library(tidyverse)
 library(Matching)
 library(arm)
-library(dbarts)
+#library(dbarts)
+library(BART)
 
 ####################################################################
 ####################################################################
@@ -34,7 +35,7 @@ dat <- bind_rows(dat1, dat2) %>% mutate(config.id = 1:n())
 #dat.interesting <- dat %>% filter(p == 10, ratio == 2, sample.size == 700)
 dat.interesting <- dat
 
-nsim <- 200
+nsim <- 3
 
 
 ####################################################################
@@ -56,6 +57,7 @@ for (j in 1:nrow(dat.interesting)){
   config.setting <- ifelse(config.sim <=48, config.sim, config.sim - 48)
   scenario <- data.frame(df.out[[config.setting]][1]) %>% mutate(Z = Z + 1)
   tau.all <- NULL
+  best.mod = NULL
   
     for (i in 1:nsim){
       
@@ -261,17 +263,22 @@ for (j in 1:nrow(dat.interesting)){
     xp2[,1] = 2  # switch treatment label 1 to 2
     xp3[,1] = 3  # switch treatment label 1 to 3
     
-    bart_tot12 = bart(x.train = xt, y.train = Y,  x.test = xp2, ntree = 100, ndpost = n.imps, verbose = FALSE)
-    bart_tot13 = bart(x.train = xt, y.train = Y,  x.test = xp3, ntree = 100, ndpost = n.imps, verbose = FALSE)
+    #bart_tot12 = bart(x.train = xt, y.train = Y,  x.test = xp2, ntree = 100, ndpost = n.imps)
+    #bart_tot13 = bart(x.train = xt, y.train = Y,  x.test = xp3, ntree = 100, ndpost = n.imps)
+    
+    bart_mod = pbart(x.train = xt, y.train = Y, k=2, ntree=100, ndpost=n.imps, nskip=500, printevery=2000L)
+    bart_pred1 = pwbart(xp1, bart_mod$treedraws)
+    bart_pred2 = pwbart(xp2, bart_mod$treedraws)
+    bart_pred3 = pwbart(xp3, bart_mod$treedraws)
     
     # Average treatment effects on the treatment group 1 (ATTs)
     n1 = nrow(xp1)
     att12.est = att13.est = NULL
     for (m in 1:n.imps) {
       # potential outcomes for treatment group 1
-      y11.hat = rbinom(n1, 1, pnorm(bart_tot12$yhat.train[m,Z==1]))
-      y12.hat = rbinom(n1, 1, pnorm(bart_tot12$yhat.test[m,]))
-      y13.hat = rbinom(n1, 1, pnorm(bart_tot13$yhat.test[m,]))
+      y11.hat = rbinom(n1, 1, pnorm(bart_pred1[m,]))
+      y12.hat = rbinom(n1, 1, pnorm(bart_pred2[m,]))
+      y13.hat = rbinom(n1, 1, pnorm(bart_pred3[m,]))
       
       # risk difference
       att12.est[m] = mean(y11.hat) - mean(y12.hat)
@@ -283,7 +290,79 @@ for (j in 1:nrow(dat.interesting)){
     
     
     
-    tau.sim <- data.frame(att12.vm, att13.vm, att12.ipw, att13.ipw, att12.ra, att13.ra, att12.bart, att13.bart)
+    
+    
+    ## BART_CV (cross-validation, K=5)
+    
+    xt = scenario.sim[,5:ncol(scenario.sim)]
+    
+    # Create five equally size folds
+    K = 5
+    folds = cut(seq(1,nrow(xt)), breaks=K, labels=FALSE)
+    
+    hyperpar = 1:8 # hyperparameters for k
+    cv.error = NULL
+    for (s in 1:8) {
+      # Perform five-fold cross validation
+      mis.error = NULL
+      for (k in 1:K) {
+        # Segement your data by fold using the which() function
+        testIndexes = which(folds==k, arr.ind=TRUE)
+        testX = xt[testIndexes, ]
+        trainX = xt[-testIndexes, ]
+        testY = Y[testIndexes]
+        trainY = Y[-testIndexes]
+        
+        # fit BART
+        n.test = length(testY)
+        bart_mod = pbart(x.train = trainX, y.train = trainY, k=s, ntree=100, ndpost=n.imps, nskip=500, printevery=2000L)
+        bart_pred = pwbart(testX, bart_mod$treedraws)
+        y.hat = rbinom(n.test, 1, pnorm(colMeans(bart_pred)))
+        
+        # calculate misclassfication rate
+        mis.error[k] = sum(testY != y.hat) / n.test
+      }
+      # calculate cross-validation error
+      cv.error[s] = mean(mis.error)
+    }
+    
+    # fit the final selected BART model
+    best.mod[i] = which.min(cv.error)
+    bart_mod = pbart(x.train = xt, y.train = Y, k=best.mod[i], ntree=100, printevery=2000L, ndpost=n.imps, nskip=500)
+    
+    # treatment 1 to 2 or 3
+    xp1 = xt[Z==1,]
+    xp2 = xp1
+    xp3 = xp1
+    xp2[,1] = 2  # switch treatment label 1 to 2
+    xp3[,1] = 3  # switch treatment label 1 to 3
+    
+    bart_pred1 = pwbart(xp1, bart_mod$treedraws)
+    bart_pred2 = pwbart(xp2, bart_mod$treedraws)
+    bart_pred3 = pwbart(xp3, bart_mod$treedraws)
+    
+    # Average treatment effects on the treatment group 1 (ATTs)
+    n1 = nrow(xp1)
+    att12.est = att13.est = NULL
+    for (m in 1:n.imps) {
+      # potential outcomes for treatment group 1
+      y11.hat = rbinom(n1, 1, pnorm(bart_pred1[m,]))
+      y12.hat = rbinom(n1, 1, pnorm(bart_pred2[m,]))
+      y13.hat = rbinom(n1, 1, pnorm(bart_pred3[m,]))
+      
+      # risk difference
+      att12.est[m] = mean(y11.hat) - mean(y12.hat)
+      att13.est[m] = mean(y11.hat) - mean(y13.hat)
+    }
+    
+    att12.bart.cv = mean(att12.est)
+    att13.bart.cv = mean(att13.est)
+    
+    
+    
+    
+    
+    tau.sim <- data.frame(att12.vm, att13.vm, att12.ipw, att13.ipw, att12.ra, att13.ra, att12.bart, att13.bart, att12.bart.cv, att13.bart.cv)
     tau.all <- rbind(tau.all, tau.sim)
     }
     
